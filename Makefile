@@ -1,9 +1,11 @@
 
 test: test.c console_parser.h
-	gcc -save-temps test.c -o test
-#	tail -50 test.i
+	gcc -save-temps -g test.c -o test
 	./test 
 	
+test.i: test.c console_parser.h
+	gcc -E test.c -o test.i
+	tail -50 test.i
 	
 clean:
-	rm -f test
+	rm -f test test.i
