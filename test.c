@@ -17,7 +17,10 @@ int main( int argc, const char* argv[] )
     struct cmd_descriptor* descriptor;
 
     CLI_REGISTER_CMD("test_int_int", test_int_int, (int)(int),
-            "Help text for test_int_int");
+            doc("help text for test_int_int"),
+            cmd_group("testgroup"),
+            arg("arg0", "help for arg0"),
+            arg("arg1", "help for arg1") );
 
     RB_FOREACH(descriptor, cmdtree, &cmdtree_head) {
         printf("%s\n", descriptor->command);

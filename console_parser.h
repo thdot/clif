@@ -1,9 +1,13 @@
 #ifndef H_CONSOLE_PARSER
 #define H_CONSOLE_PARSER 1
 
+#define BOOST_PP_VARIADICS
+
 #include <stdlib.h>
 #include <string.h>
 #include <boost/preprocessor.hpp>
+#include <boost/preprocessor/facilities/is_empty.hpp>
+#include <boost/preprocessor/control/expr_iif.hpp>
 #include "tree.h"
 
 
@@ -65,20 +69,52 @@ RB_GENERATE(cmdtree, cmd_descriptor, descriptor, cmp_cmd_descriptor)
     void _CLI_REGISTER_FN(argtypes) (                                                               \
         const char* command,                                                                        \
         void (* functionToCall)(_CLI_PARSE_TYPE_LIST(argtypes)),                                    \
-        const char* doc)                                                                            \
+        const char* doc, const char* cmdgroup)                                                      \
     {                                                                                               \
         struct cmd_descriptor* cmd_descr = add_cmd_descriptor(                                      \
             command, functionToCall, _CLI_CALLER_FN(argtypes), BOOST_PP_SEQ_SIZE(argtypes),         \
-            doc);                                                                                   \
+            doc, cmdgroup);                                                                         \
         _CLI_ADD_PARAM_DESCRIPTORS(cmd_descr, argtypes)                                             \
     }                                                                                               \
 
-#define CLI_REGISTER_CMD(command, function, argtypes, doc)                                          \
-        _CLI_REGISTER_FN(argtypes) (command, function, doc)
+#define _CLI_ARG_TYPE_doc(unused...)        1
+#define _CLI_ARG_TYPE_arg(unused...)        2
+#define _CLI_ARG_TYPE_cmd_group(unused...)  3
+
+#define _CLI_ARG_doc(helptext) helptext
+#define _CLI_ARG_cmd_group(group) group
+
+#define _CLI_ARG_TYPE_IS(arg, type)                                                                 \
+    BOOST_PP_EQUAL(BOOST_PP_CAT(_CLI_ARG_TYPE_, arg), type)
+
+#define _CLI_HAS_ARG_I(r, type, arg)                                                                \
+    BOOST_PP_EXPR_IIF(_CLI_ARG_TYPE_IS(arg, type), y)
+
+#define _CLI_HAS_ARG(argtype, args)                                                                 \
+    BOOST_PP_NOT(BOOST_PP_IS_EMPTY(BOOST_PP_SEQ_FOR_EACH(_CLI_HAS_ARG_I, argtype, args)))
+
+#define _CLI_GET_ARG_I(r, type, arg)                                                                \
+    BOOST_PP_EXPR_IIF(_CLI_ARG_TYPE_IS(arg, type), BOOST_PP_CAT(_CLI_ARG_, arg))
+
+#define _CLI_GET_ARG(argtype, args, defaultvalue)                                                   \
+    BOOST_PP_IIF(                                                                                   \
+        _CLI_HAS_ARG(argtype, args),                                                                \
+        BOOST_PP_SEQ_FOR_EACH(_CLI_GET_ARG_I, argtype, args),                                       \
+        defaultvalue)
+
+#define _CLI_HANDLE_REGISTER_CMD_ARGS(args)                                                         \
+    _CLI_GET_ARG(_CLI_ARG_TYPE_doc(), args, ""),                                                    \
+    _CLI_GET_ARG(_CLI_ARG_TYPE_cmd_group(), args, "")
+
+
+#define CLI_REGISTER_CMD(command, function, argtypes, args...)                                      \
+    _CLI_REGISTER_FN(argtypes) (command, function,                                                  \
+            _CLI_HANDLE_REGISTER_CMD_ARGS( BOOST_PP_VARIADIC_TO_SEQ(args) ));
 
 
 static struct cmd_descriptor* add_cmd_descriptor(const char* command, void* functionToCall,
-        void (* caller)(struct cmd_descriptor *), short numberOfParameters, const char* doc)
+        void (* caller)(struct cmd_descriptor *), short numberOfParameters,
+        const char* doc, const char* cmdgroup)
 {
     struct cmd_descriptor* new_descriptor = malloc(sizeof(struct cmd_descriptor));
     memset(new_descriptor, 0x00, sizeof(struct cmd_descriptor));
