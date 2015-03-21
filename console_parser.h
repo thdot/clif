@@ -83,33 +83,58 @@ RB_GENERATE(cmdtree, cmd_descriptor, descriptor, cmp_cmd_descriptor)
 
 #define _CLI_ARG_doc(helptext) helptext
 #define _CLI_ARG_cmd_group(group) group
+#define _CLI_ARG_arg(name, helptext) name, helptext
 
 #define _CLI_ARG_TYPE_IS(arg, type)                                                                 \
     BOOST_PP_EQUAL(BOOST_PP_CAT(_CLI_ARG_TYPE_, arg), type)
 
-#define _CLI_HAS_ARG_I(r, type, arg)                                                                \
-    BOOST_PP_EXPR_IIF(_CLI_ARG_TYPE_IS(arg, type), y)
+#define _CLI_ADD(s, state, elem) BOOST_PP_ADD(state, elem)
 
-#define _CLI_HAS_ARG(argtype, args)                                                                 \
-    BOOST_PP_NOT(BOOST_PP_IS_EMPTY(BOOST_PP_SEQ_FOR_EACH(_CLI_HAS_ARG_I, argtype, args)))
+#define _CLI_COUNT_ARG_I(r, type, arg) (_CLI_ARG_TYPE_IS(arg, type))
 
-#define _CLI_GET_ARG_I(r, type, arg)                                                                \
-    BOOST_PP_EXPR_IIF(_CLI_ARG_TYPE_IS(arg, type), BOOST_PP_CAT(_CLI_ARG_, arg))
+#define _CLI_COUNT_ARG(argtype, args)                                                               \
+    BOOST_PP_SEQ_FOLD_LEFT(                                                                         \
+        _CLI_ADD, 0,                                                                                \
+        BOOST_PP_SEQ_FOR_EACH(_CLI_COUNT_ARG_I, argtype, args))
+
+#define _CLI_HAS_NOT_ARG(argtype, args)                                                             \
+    BOOST_PP_EQUAL(_CLI_COUNT_ARG(argtype, args), 0)
+
+#define _CLI_EXPR_IF(cond) BOOST_PP_CAT(_CLI_EXPR_IF_, cond)
+#define _CLI_EXPR_IF_0(...)
+#define _CLI_EXPR_IF_1(...) __VA_ARGS__
+
+#define _CLI_GET_ARG_II(r, type, arg)                                                               \
+    _CLI_EXPR_IF_1(_CLI_ARG_TYPE_IS(arg, type))(BOOST_PP_CAT(_CLI_ARG_, arg))                       \
+    BOOST_PP_COMMA_IF(_CLI_ARG_TYPE_IS(arg, type))
+
+#define _CLI_GET_ARG_I(argtype, args)                                                               \
+    BOOST_PP_SEQ_FOR_EACH(_CLI_GET_ARG_II, argtype, args)
 
 #define _CLI_GET_ARG(argtype, args, defaultvalue)                                                   \
-    BOOST_PP_IIF(                                                                                   \
-        _CLI_HAS_ARG(argtype, args),                                                                \
-        BOOST_PP_SEQ_FOR_EACH(_CLI_GET_ARG_I, argtype, args),                                       \
-        defaultvalue)
+    _CLI_GET_ARG_I(argtype, args)         \
+    BOOST_PP_EXPR_IIF( _CLI_HAS_NOT_ARG(argtype, args), defaultvalue) \
+    BOOST_PP_COMMA_IF( _CLI_HAS_NOT_ARG(argtype, args))
 
-#define _CLI_HANDLE_REGISTER_CMD_ARGS(args)                                                         \
-    _CLI_GET_ARG(_CLI_ARG_TYPE_doc(), args, ""),                                                    \
-    _CLI_GET_ARG(_CLI_ARG_TYPE_cmd_group(), args, "")
+#define _CLI_DEFAULT_PARAM_DESCRIPTION(z, index, argtypes)                                          \
+    "arg" BOOST_PP_STRINGIZE(index), "",
+
+#define _CLI_ADD_MISSING_PARAM_DESCRIPTION(start, argtypes)                                         \
+    BOOST_PP_REPEAT_FROM_TO(start, BOOST_PP_SEQ_SIZE(argtypes),                                     \
+        _CLI_DEFAULT_PARAM_DESCRIPTION, argtypes)
+
+#define _CLI_HANDLE_REGISTER_CMD_ARGS(argtypes, args)                                               \
+    _CLI_GET_ARG(_CLI_ARG_TYPE_doc(), args, "")                                                     \
+    _CLI_GET_ARG(_CLI_ARG_TYPE_cmd_group(), args, "")                                               \
+    _CLI_GET_ARG(_CLI_ARG_TYPE_arg(), args, BOOST_PP_EMPTY)                                         \
+    _CLI_ADD_MISSING_PARAM_DESCRIPTION(                                                             \
+        _CLI_COUNT_ARG(_CLI_ARG_TYPE_arg(), args), argtypes)                                        \
+    NULL
 
 
 #define CLI_REGISTER_CMD(command, function, argtypes, args...)                                      \
     _CLI_REGISTER_FN(argtypes) (command, function,                                                  \
-            _CLI_HANDLE_REGISTER_CMD_ARGS( BOOST_PP_VARIADIC_TO_SEQ(args) ));
+        _CLI_HANDLE_REGISTER_CMD_ARGS( argtypes, BOOST_PP_VARIADIC_TO_SEQ(args) ));
 
 
 static struct cmd_descriptor* add_cmd_descriptor(const char* command, void* functionToCall,
