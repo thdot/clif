@@ -4,7 +4,7 @@
 #include "console_parser.h"
 
 
-CLI_REGISTER_CMD_PROTOTYPE((int)(int)(int))
+CLIF_REGISTER_CMD_PROTOTYPE((int)(int)(int))
 
 
 void test_int_int(int i1, int i2, int i3)
@@ -16,7 +16,7 @@ int main( int argc, const char* argv[] )
 {
     struct cmd_descriptor* descriptor;
 
-    CLI_REGISTER_CMD("test_int_int", test_int_int, (int)(int)(int),
+    CLIF_REGISTER_CMD("test_int_int", test_int_int, (int)(int)(int),
             doc("help text for test_int_int"),
             cmd_group("testgroup"),
             arg("arg0", "help for arg0"),

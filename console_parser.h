@@ -11,7 +11,7 @@
 #include "tree.h"
 
 
-#define CLI_MAX_NR_OF_PARAMETERS 5
+#define CLIF_MAX_NR_OF_PARAMETERS 5
 
 struct parameter_descriptor
 {
@@ -31,7 +31,7 @@ struct cmd_descriptor
     void* functionToCall;
     void (* caller)(struct cmd_descriptor *);
     short numberOfParameters;
-    struct parameter_descriptor params[CLI_MAX_NR_OF_PARAMETERS];
+    struct parameter_descriptor params[CLIF_MAX_NR_OF_PARAMETERS];
 };
 
 static int cmp_cmd_descriptor(struct cmd_descriptor * d1, struct cmd_descriptor * d2)
@@ -43,98 +43,98 @@ RB_HEAD(cmdtree, cmd_descriptor) cmdtree_head = RB_INITIALIZER(&cmdtree_head);
 RB_GENERATE(cmdtree, cmd_descriptor, descriptor, cmp_cmd_descriptor)
 
 
-#define _CLI_PARSE_TYPE_LIST(argtypes) BOOST_PP_SEQ_FOR_EACH_I(_CLI_PARSE_TYPE, _, argtypes)
-#define _CLI_PARSE_TYPE(r, _, i, type) BOOST_PP_COMMA_IF(i) type
+#define _CLIF_PARSE_TYPE_LIST(argtypes) BOOST_PP_SEQ_FOR_EACH_I(_CLIF_PARSE_TYPE, _, argtypes)
+#define _CLIF_PARSE_TYPE(r, _, i, type) BOOST_PP_COMMA_IF(i) type
 
-#define _CLI_ADD_PARAM_DESCRIPTORS(cmd_descr, argtypes)                                             \
-    BOOST_PP_SEQ_FOR_EACH_I(_CLI_ADD_PARAM, cmd_descr, argtypes)
-#define _CLI_ADD_PARAM(r, cmd_descr, i, type)                                                       \
+#define _CLIF_ADD_PARAM_DESCRIPTORS(cmd_descr, argtypes)                                            \
+    BOOST_PP_SEQ_FOR_EACH_I(_CLIF_ADD_PARAM, cmd_descr, argtypes)
+#define _CLIF_ADD_PARAM(r, cmd_descr, i, type)                                                      \
     add_param_descriptor(cmd_descr, i, sizeof(type), BOOST_PP_STRINGIZE(type),                      \
-            (int (*)(char *, void *))BOOST_PP_CAT(cli_parse_,type));
+            (int (*)(char *, void *))BOOST_PP_CAT(clif_parse_,type));
 
-#define _CLI_PARSE_CAST_VALUES(descriptor, argtypes)                                                \
-    BOOST_PP_SEQ_FOR_EACH_I(_CLI_PARSE_CAST_VAL, _, argtypes)
-#define _CLI_PARSE_CAST_VAL(r, _, i, type)                                                          \
+#define _CLIF_PARSE_CAST_VALUES(descriptor, argtypes)                                               \
+    BOOST_PP_SEQ_FOR_EACH_I(_CLIF_PARSE_CAST_VAL, _, argtypes)
+#define _CLIF_PARSE_CAST_VAL(r, _, i, type)                                                         \
     BOOST_PP_COMMA_IF(i) (*(type*)descriptor->params[i].value)
 
-#define _CLI_CALLER_FN(argtypes)   BOOST_PP_CAT(cli_call_cmd_,     BOOST_PP_SEQ_CAT(argtypes))
-#define _CLI_REGISTER_FN(argtypes) BOOST_PP_CAT(cli_register_cmd_, BOOST_PP_SEQ_CAT(argtypes))
+#define _CLIF_CALLER_FN(argtypes)   BOOST_PP_CAT(clif_call_cmd_,     BOOST_PP_SEQ_CAT(argtypes))
+#define _CLIF_REGISTER_FN(argtypes) BOOST_PP_CAT(clif_register_cmd_, BOOST_PP_SEQ_CAT(argtypes))
 
-#define CLI_REGISTER_CMD_PROTOTYPE(argtypes)                                                        \
-    void _CLI_CALLER_FN(argtypes) (struct cmd_descriptor * descriptor)                              \
+#define CLIF_REGISTER_CMD_PROTOTYPE(argtypes)                                                       \
+    void _CLIF_CALLER_FN(argtypes) (struct cmd_descriptor * descriptor)                             \
     {                                                                                               \
-        ((void (*)(_CLI_PARSE_TYPE_LIST(argtypes)))descriptor->functionToCall)(                     \
-            _CLI_PARSE_CAST_VALUES(descriptor, argtypes));                                          \
+        ((void (*)(_CLIF_PARSE_TYPE_LIST(argtypes)))descriptor->functionToCall)(                    \
+            _CLIF_PARSE_CAST_VALUES(descriptor, argtypes));                                         \
     }                                                                                               \
-    void _CLI_REGISTER_FN(argtypes) (                                                               \
+    void _CLIF_REGISTER_FN(argtypes) (                                                              \
         const char* command,                                                                        \
-        void (* functionToCall)(_CLI_PARSE_TYPE_LIST(argtypes)),                                    \
+        void (* functionToCall)(_CLIF_PARSE_TYPE_LIST(argtypes)),                                   \
         const char* doc, const char* cmdgroup)                                                      \
     {                                                                                               \
         struct cmd_descriptor* cmd_descr = add_cmd_descriptor(                                      \
-            command, functionToCall, _CLI_CALLER_FN(argtypes), BOOST_PP_SEQ_SIZE(argtypes),         \
+            command, functionToCall, _CLIF_CALLER_FN(argtypes), BOOST_PP_SEQ_SIZE(argtypes),        \
             doc, cmdgroup);                                                                         \
-        _CLI_ADD_PARAM_DESCRIPTORS(cmd_descr, argtypes)                                             \
+        _CLIF_ADD_PARAM_DESCRIPTORS(cmd_descr, argtypes)                                            \
     }                                                                                               \
 
-#define _CLI_ARG_TYPE_doc(unused...)        1
-#define _CLI_ARG_TYPE_arg(unused...)        2
-#define _CLI_ARG_TYPE_cmd_group(unused...)  3
+#define _CLIF_ARG_TYPE_doc(unused...)        1
+#define _CLIF_ARG_TYPE_arg(unused...)        2
+#define _CLIF_ARG_TYPE_cmd_group(unused...)  3
 
-#define _CLI_ARG_doc(helptext) helptext
-#define _CLI_ARG_cmd_group(group) group
-#define _CLI_ARG_arg(name, helptext) name, helptext
+#define _CLIF_ARG_doc(helptext) helptext
+#define _CLIF_ARG_cmd_group(group) group
+#define _CLIF_ARG_arg(name, helptext) name, helptext
 
-#define _CLI_ARG_TYPE_IS(arg, type)                                                                 \
-    BOOST_PP_EQUAL(BOOST_PP_CAT(_CLI_ARG_TYPE_, arg), type)
+#define _CLIF_ARG_TYPE_IS(arg, type)                                                                \
+    BOOST_PP_EQUAL(BOOST_PP_CAT(_CLIF_ARG_TYPE_, arg), type)
 
-#define _CLI_ADD(s, state, elem) BOOST_PP_ADD(state, elem)
+#define _CLIF_ADD(s, state, elem) BOOST_PP_ADD(state, elem)
 
-#define _CLI_COUNT_ARG_I(r, type, arg) (_CLI_ARG_TYPE_IS(arg, type))
+#define _CLIF_COUNT_ARG_I(r, type, arg) (_CLIF_ARG_TYPE_IS(arg, type))
 
-#define _CLI_COUNT_ARG(argtype, args)                                                               \
+#define _CLIF_COUNT_ARG(argtype, args)                                                              \
     BOOST_PP_SEQ_FOLD_LEFT(                                                                         \
-        _CLI_ADD, 0,                                                                                \
-        BOOST_PP_SEQ_FOR_EACH(_CLI_COUNT_ARG_I, argtype, args))
+        _CLIF_ADD, 0,                                                                               \
+        BOOST_PP_SEQ_FOR_EACH(_CLIF_COUNT_ARG_I, argtype, args))
 
-#define _CLI_HAS_NOT_ARG(argtype, args)                                                             \
-    BOOST_PP_EQUAL(_CLI_COUNT_ARG(argtype, args), 0)
+#define _CLIF_HAS_NOT_ARG(argtype, args)                                                            \
+    BOOST_PP_EQUAL(_CLIF_COUNT_ARG(argtype, args), 0)
 
-#define _CLI_EXPR_IF(cond) BOOST_PP_CAT(_CLI_EXPR_IF_, cond)
-#define _CLI_EXPR_IF_0(...)
-#define _CLI_EXPR_IF_1(...) __VA_ARGS__
+#define _CLIF_EXPR_IF(cond) BOOST_PP_CAT(_CLIF_EXPR_IF_, cond)
+#define _CLIF_EXPR_IF_0(...)
+#define _CLIF_EXPR_IF_1(...) __VA_ARGS__
 
-#define _CLI_GET_ARG_II(r, type, arg)                                                               \
-    _CLI_EXPR_IF_1(_CLI_ARG_TYPE_IS(arg, type))(BOOST_PP_CAT(_CLI_ARG_, arg))                       \
-    BOOST_PP_COMMA_IF(_CLI_ARG_TYPE_IS(arg, type))
+#define _CLIF_GET_ARG_II(r, type, arg)                                                              \
+    _CLIF_EXPR_IF(_CLIF_ARG_TYPE_IS(arg, type))(BOOST_PP_CAT(_CLIF_ARG_, arg))                    \
+    BOOST_PP_COMMA_IF(_CLIF_ARG_TYPE_IS(arg, type))
 
-#define _CLI_GET_ARG_I(argtype, args)                                                               \
-    BOOST_PP_SEQ_FOR_EACH(_CLI_GET_ARG_II, argtype, args)
+#define _CLIF_GET_ARG_I(argtype, args)                                                              \
+    BOOST_PP_SEQ_FOR_EACH(_CLIF_GET_ARG_II, argtype, args)
 
-#define _CLI_GET_ARG(argtype, args, defaultvalue)                                                   \
-    _CLI_GET_ARG_I(argtype, args)         \
-    BOOST_PP_EXPR_IIF( _CLI_HAS_NOT_ARG(argtype, args), defaultvalue) \
-    BOOST_PP_COMMA_IF( _CLI_HAS_NOT_ARG(argtype, args))
+#define _CLIF_GET_ARG(argtype, args, defaultvalue)                                                  \
+    _CLIF_GET_ARG_I(argtype, args)         \
+    BOOST_PP_EXPR_IIF( _CLIF_HAS_NOT_ARG(argtype, args), defaultvalue) \
+    BOOST_PP_COMMA_IF( _CLIF_HAS_NOT_ARG(argtype, args))
 
-#define _CLI_DEFAULT_PARAM_DESCRIPTION(z, index, argtypes)                                          \
+#define _CLIF_DEFAULT_PARAM_DESCRIPTION(z, index, argtypes)                                         \
     "arg" BOOST_PP_STRINGIZE(index), "",
 
-#define _CLI_ADD_MISSING_PARAM_DESCRIPTION(start, argtypes)                                         \
+#define _CLIF_ADD_MISSING_PARAM_DESCRIPTION(start, argtypes)                                        \
     BOOST_PP_REPEAT_FROM_TO(start, BOOST_PP_SEQ_SIZE(argtypes),                                     \
-        _CLI_DEFAULT_PARAM_DESCRIPTION, argtypes)
+        _CLIF_DEFAULT_PARAM_DESCRIPTION, argtypes)
 
-#define _CLI_HANDLE_REGISTER_CMD_ARGS(argtypes, args)                                               \
-    _CLI_GET_ARG(_CLI_ARG_TYPE_doc(), args, "")                                                     \
-    _CLI_GET_ARG(_CLI_ARG_TYPE_cmd_group(), args, "")                                               \
-    _CLI_GET_ARG(_CLI_ARG_TYPE_arg(), args, BOOST_PP_EMPTY)                                         \
-    _CLI_ADD_MISSING_PARAM_DESCRIPTION(                                                             \
-        _CLI_COUNT_ARG(_CLI_ARG_TYPE_arg(), args), argtypes)                                        \
+#define _CLIF_HANDLE_REGISTER_CMD_ARGS(argtypes, args)                                              \
+    _CLIF_GET_ARG(_CLIF_ARG_TYPE_doc(), args, "")                                                   \
+    _CLIF_GET_ARG(_CLIF_ARG_TYPE_cmd_group(), args, "")                                             \
+    _CLIF_GET_ARG(_CLIF_ARG_TYPE_arg(), args, BOOST_PP_EMPTY)                                       \
+    _CLIF_ADD_MISSING_PARAM_DESCRIPTION(                                                            \
+        _CLIF_COUNT_ARG(_CLIF_ARG_TYPE_arg(), args), argtypes)                                      \
     NULL
 
 
-#define CLI_REGISTER_CMD(command, function, argtypes, args...)                                      \
-    _CLI_REGISTER_FN(argtypes) (command, function,                                                  \
-        _CLI_HANDLE_REGISTER_CMD_ARGS( argtypes, BOOST_PP_VARIADIC_TO_SEQ(args) ));
+#define CLIF_REGISTER_CMD(command, function, argtypes, args...)                                     \
+    _CLIF_REGISTER_FN(argtypes) (command, function,                                                 \
+        _CLIF_HANDLE_REGISTER_CMD_ARGS( argtypes, BOOST_PP_VARIADIC_TO_SEQ(args) ));
 
 
 static struct cmd_descriptor* add_cmd_descriptor(const char* command, void* functionToCall,
@@ -160,7 +160,7 @@ static void add_param_descriptor(struct cmd_descriptor* cmd_descr, short index, 
     cmd_descr->params[index].type = type;
 }
 
-int cli_parse(char * line)
+int clif_parse(char * line)
 {
     int i, result = 0;
     struct cmd_descriptor find, *descr;
@@ -209,7 +209,7 @@ out:
     return result;
 }
 
-static int cli_parse_int(char * token, int * result)
+static int clif_parse_int(char * token, int * result)
 {
     return sscanf(token, "%d", result) != 1;
 }
