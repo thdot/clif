@@ -13,34 +13,36 @@
 
 #define CLIF_MAX_NR_OF_PARAMETERS 5
 
-struct parameter_descriptor
+
+enum clif_ptr_type {
+    CLIF_PTR_NONE,
+    CLIF_PTR_INPUT,
+    CLIF_PTR_RAW,
+};
+
+struct clif_param_descriptor
 {
     const char * type;
     const char * name;
     const char * helptext;
     size_t size;
     void * value;
+    enum clif_ptr_type ptr_type;
     int (* parser)(char *, void *);
 };
 
-struct cmd_descriptor
+struct clif_cmd_descriptor
 {
-    RB_ENTRY(cmd_descriptor) descriptor;
+    RB_ENTRY(clif_cmd_descriptor) descriptor;
     const char * command;
     const char * helptext;
     void* functionToCall;
-    void (* caller)(struct cmd_descriptor *);
+    void (* caller)(struct clif_cmd_descriptor *);
     short numberOfParameters;
-    struct parameter_descriptor params[CLIF_MAX_NR_OF_PARAMETERS];
+    struct clif_param_descriptor params[CLIF_MAX_NR_OF_PARAMETERS];
 };
 
-static int cmp_cmd_descriptor(struct cmd_descriptor * d1, struct cmd_descriptor * d2)
-{
-    return strcmp(d1->command, d2->command);
-}
-
-RB_HEAD(cmdtree, cmd_descriptor) cmdtree_head = RB_INITIALIZER(&cmdtree_head);
-RB_GENERATE(cmdtree, cmd_descriptor, descriptor, cmp_cmd_descriptor)
+RB_HEAD(clif_cmdtree, clif_cmd_descriptor) clif_cmdtree_root;
 
 
 #define _CLIF_PARSE_TYPE_LIST(paramtypes) BOOST_PP_SEQ_FOR_EACH_I(_CLIF_PARSE_TYPE, _, paramtypes)
@@ -61,7 +63,7 @@ RB_GENERATE(cmdtree, cmd_descriptor, descriptor, cmp_cmd_descriptor)
 #define _CLIF_REGISTER_FN(paramtypes) BOOST_PP_CAT(clif_register_cmd_, BOOST_PP_SEQ_CAT(paramtypes))
 
 #define CLIF_REGISTER_CMD_PROTOTYPE(paramtypes)                                                       \
-    void _CLIF_CALLER_FN(paramtypes) (struct cmd_descriptor * descriptor)                             \
+    void _CLIF_CALLER_FN(paramtypes) (struct clif_cmd_descriptor * descriptor)                             \
     {                                                                                               \
         ((void (*)(_CLIF_PARSE_TYPE_LIST(paramtypes)))descriptor->functionToCall)(                    \
             _CLIF_PARSE_CAST_VALUES(descriptor, paramtypes));                                         \
@@ -70,12 +72,6 @@ RB_GENERATE(cmdtree, cmd_descriptor, descriptor, cmp_cmd_descriptor)
         const char* command,                                                                        \
         void (* functionToCall)(_CLIF_PARSE_TYPE_LIST(paramtypes)),                                   \
         const char* doc, const char* cmdgroup);                                                      \
-//    {                                                                                               \
-//        struct cmd_descriptor* cmd_descr = add_cmd_descriptor(                                      \
-//            command, functionToCall, _CLIF_CALLER_FN(argtypes), BOOST_PP_SEQ_SIZE(argtypes),        \
-//            doc, cmdgroup);                                                                         \
-//        _CLIF_ADD_PARAM_DESCRIPTORS(cmd_descr, argtypes)                                            \
-    }                                                                                               \
 
 #define _CLIF_ARG_TYPE_doc(unused...)        1
 #define _CLIF_ARG_TYPE_cmd_group(unused...)  2
@@ -136,12 +132,12 @@ RB_GENERATE(cmdtree, cmd_descriptor, descriptor, cmp_cmd_descriptor)
     _CLIF_STATIC_PARAM_DESCRIPTION(paramtypes) NULL
 
 #define _CLIF_ADD_CMD_PARAM_DECL()                                                                  \
-    BOOST_PP_REPEAT(CLIF_MAX_NR_OF_PARAMETERS, _CLIF_PARAM_DECL_USER_I, _)                          \
-    BOOST_PP_REPEAT(CLIF_MAX_NR_OF_PARAMETERS, _CLIF_PARAM_DECL_STATIC_I, _)
-#define _CLIF_PARAM_DECL_USER_I(z, n, _)                                                            \
+    BOOST_PP_REPEAT(CLIF_MAX_NR_OF_PARAMETERS, _CLIF_PARAM_DECL_USER, _)                          \
+    BOOST_PP_REPEAT(CLIF_MAX_NR_OF_PARAMETERS, _CLIF_PARAM_DECL_STATIC, _)
+#define _CLIF_PARAM_DECL_USER(z, n, _)                                                            \
     , const char * _CLIF_PARAM_NAME(name, n)                                                        \
     , const char * _CLIF_PARAM_NAME(doc, n)
-#define _CLIF_PARAM_DECL_STATIC_I(z, n, _)                                                          \
+#define _CLIF_PARAM_DECL_STATIC(z, n, _)                                                          \
     , size_t _CLIF_PARAM_NAME(size, n)                                                              \
     , const char * _CLIF_PARAM_NAME(type, n)                                                        \
     , int (* _CLIF_PARAM_NAME(parser, n))(char *, void *)
@@ -157,85 +153,19 @@ RB_GENERATE(cmdtree, cmd_descriptor, descriptor, cmp_cmd_descriptor)
 
 #define CLIF_REGISTER_CMD(command, function, paramtypes, args...)                                   \
     clif_add_cmd_descriptor(command, function,                                                      \
-        _CLIF_CALLER_FN(paramtypes), BOOST_PP_SEQ_SIZE(paramtypes),                                 \
-        _CLIF_HANDLE_REGISTER_CMD_ARGS(paramtypes, BOOST_PP_VARIADIC_TO_SEQ(args)));
+        _CLIF_CALLER_FN(BOOST_PP_TUPLE_TO_SEQ(paramtypes)), BOOST_PP_TUPLE_SIZE(paramtypes),        \
+        _CLIF_HANDLE_REGISTER_CMD_ARGS(                                                             \
+            BOOST_PP_TUPLE_TO_SEQ(paramtypes), BOOST_PP_VARIADIC_TO_SEQ(args)));
 
 
 void clif_add_cmd_descriptor(const char* command, void* functionToCall,
-        void (* caller)(struct cmd_descriptor *), short numberOfParameters,
+        void (* caller)(struct clif_cmd_descriptor *), short numberOfParameters,
         const char* doc, const char* cmdgroup
-        _CLIF_ADD_CMD_PARAM_DECL(), void* end )
-{
-    struct cmd_descriptor* new_descriptor = malloc(sizeof(struct cmd_descriptor));
-    memset(new_descriptor, 0x00, sizeof(struct cmd_descriptor));
-    new_descriptor->command = strdup(command);
-    new_descriptor->functionToCall = functionToCall;
-    new_descriptor->caller = caller;
-    new_descriptor->numberOfParameters = numberOfParameters;
-    new_descriptor->helptext = strdup(doc);
-    RB_INSERT(cmdtree, &cmdtree_head, new_descriptor);
-    BOOST_PP_REPEAT(CLIF_MAX_NR_OF_PARAMETERS, _CLIF_ADD_PARAM_DESCR, new_descriptor);
-}
+        _CLIF_ADD_CMD_PARAM_DECL(), void* end );
 
+int clif_parse(char * line);
 
-void clif_add_param_descriptor(struct cmd_descriptor* cmd_descr, short index, size_t size,
-        const char * type, int (* parser)(char *, void *))
-{
+int clif_parse_int(char * token, int * result);
 
-}
-
-int clif_parse(char * line)
-{
-    int i = 0, result = 0;
-    struct cmd_descriptor find, *descr;
-    char * token;
-    char * parseline = strdup(line);
-
-    token = strtok(parseline, " ");
-    if (token == NULL)
-        return 0;
-
-    find.command = token;
-    descr = RB_FIND(cmdtree, &cmdtree_head, &find);
-
-    if (! descr) {
-        printf("command not found: %s\n", token);
-        return 1;
-    }
-
-    token = strtok(NULL, " ");
-    while (token != NULL) {
-        if (i > descr->numberOfParameters) {
-            printf("too many number of arguments\n");
-            result = 1;
-            goto out;
-        }
-        descr->params[i].value = malloc(descr->params[i].size);
-        (*descr->params[i].parser)(token, descr->params[i].value);
-        token = strtok(NULL, " ");
-        i++;
-    }
-    if (i != descr->numberOfParameters) {
-        printf("invalid number of arguments (%d given)\n", i);
-        result = 1;
-        goto out;
-    }
-
-    (*descr->caller)(descr);
-
-out:
-    for (i = 0; i < descr->numberOfParameters; i++) {
-        free(descr->params[i].value);
-        descr->params[i].value = NULL;
-    }
-    free(parseline);
-
-    return result;
-}
-
-static int clif_parse_int(char * token, int * result)
-{
-    return sscanf(token, "%d", result) != 1;
-}
 
 #endif
