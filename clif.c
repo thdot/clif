@@ -58,13 +58,17 @@ int clif_parse(char * line)
             goto out;
         }
         descr->params[i].value = malloc(descr->params[i].size);
-        (*descr->params[i].parser)(token, descr->params[i].value);
+        if ((*descr->params[i].parser)(token, descr->params[i].value) != 0) {
+            printf("invalid argument: %s\n", token);
+            result = 2;
+            goto out;
+        }
         token = strtok(NULL, " ");
         i++;
     }
     if (i != descr->numberOfParameters) {
         printf("invalid number of arguments (%d given)\n", i);
-        result = 2;
+        result = 3;
         goto out;
     }
 
