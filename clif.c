@@ -52,7 +52,7 @@ int clif_parse(char * line)
 
     token = strtok(NULL, " ");
     while (token != NULL) {
-        if (i > descr->numberOfParameters) {
+        if (i + 1 > descr->numberOfParameters) {
             printf("too many number of arguments\n");
             result = 1;
             goto out;
@@ -67,8 +67,8 @@ int clif_parse(char * line)
         i++;
     }
     if (i != descr->numberOfParameters) {
-        printf("invalid number of arguments (%d given)\n", i);
-        result = 3;
+        printf("invalid number of arguments\n");
+        result = 1;
         goto out;
     }
 
@@ -87,4 +87,9 @@ out:
 int clif_parse_int(char * token, int * result)
 {
     return sscanf(token, "%d", result) != 1;
+}
+
+int clif_parse_ptr(char * token, void * result)
+{
+    return 1;
 }

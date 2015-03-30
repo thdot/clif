@@ -45,8 +45,9 @@ struct clif_cmd_descriptor
 RB_HEAD(clif_cmdtree, clif_cmd_descriptor) clif_cmdtree_root;
 
 
-#define _CLIF_PARSE_TYPE_LIST(paramtypes) BOOST_PP_SEQ_FOR_EACH_I(_CLIF_PARSE_TYPE, _, paramtypes)
-#define _CLIF_PARSE_TYPE(r, _, i, type) BOOST_PP_COMMA_IF(i) type
+#define _CLIF_PARSE_TYPE_LIST(paramtypes) BOOST_PP_SEQ_FOR_EACH_I(                                  \
+        _CLIF_PARSE_TYPE_LIST_I, _, paramtypes)
+#define _CLIF_PARSE_TYPE_LIST_I(r, _, i, type) BOOST_PP_COMMA_IF(i) _CLIF_ARG_PTR_TYPE(type)
 
 #define _CLIF_ADD_PARAM_DESCRIPTORS(cmd_descr, paramtypes)                                          \
     BOOST_PP_SEQ_FOR_EACH_I(_CLIF_ADD_PARAM, cmd_descr, paramtypes)
@@ -57,37 +58,60 @@ RB_HEAD(clif_cmdtree, clif_cmd_descriptor) clif_cmdtree_root;
 #define _CLIF_PARSE_CAST_VALUES(descriptor, paramtypes)                                             \
     BOOST_PP_SEQ_FOR_EACH_I(_CLIF_PARSE_CAST_VAL, _, paramtypes)
 #define _CLIF_PARSE_CAST_VAL(r, _, i, type)                                                         \
-    BOOST_PP_COMMA_IF(i) (*(type*)descriptor->params[i].value)
+    BOOST_PP_COMMA_IF(i) _CLIF_ARG_PTR_CAST(type)descriptor->params[i].value
 
 #define _CLIF_CALLER_FN(paramtypes)                                                                 \
-    BOOST_PP_CAT(clif_call_cmd_, BOOST_PP_SEQ_CAT( \
-            BOOST_PP_SEQ_TRANSFORM(_CLIF_ARG_PTR_TRANSFORM, _, paramtypes)))
+    BOOST_PP_CAT(clif_call_cmd_, BOOST_PP_SEQ_CAT(                                                  \
+            BOOST_PP_SEQ_TRANSFORM(_CLIF_ARG_PTR_TRANSFORM, _, BOOST_PP_TUPLE_TO_SEQ(paramtypes))))
 #define _CLIF_REGISTER_FN(paramtypes)                                                               \
     BOOST_PP_CAT(clif_register_cmd_, BOOST_PP_SEQ_CAT(paramtypes))
 
 #define CLIF_REGISTER_CMD_PROTOTYPE(paramtypes)                                                     \
     void _CLIF_CALLER_FN(paramtypes) (struct clif_cmd_descriptor * descriptor)                      \
     {                                                                                               \
-        ((void (*)(_CLIF_PARSE_TYPE_LIST(paramtypes)))descriptor->functionToCall)(                  \
-            _CLIF_PARSE_CAST_VALUES(descriptor, paramtypes));                                       \
+        ((void (*)(_CLIF_PARSE_TYPE_LIST(BOOST_PP_TUPLE_TO_SEQ(paramtypes))))                       \
+            descriptor->functionToCall)(_CLIF_PARSE_CAST_VALUES(                                    \
+                descriptor, BOOST_PP_TUPLE_TO_SEQ(paramtypes)));                                    \
     }                                                                                               \
-    void _CLIF_REGISTER_FN(paramtypes) (                                                            \
-        const char* command,                                                                        \
-        void (* functionToCall)(_CLIF_PARSE_TYPE_LIST(paramtypes)),                                 \
-        const char* doc, const char* cmdgroup);                                                     \
+//    void _CLIF_REGISTER_FN(paramtypes) (
+//        const char* command,
+//        void (* functionToCall)(_CLIF_PARSE_TYPE_LIST(paramtypes)),
+//        const char* doc, const char* cmdgroup);
 
 #define _CLIF_ARG_PTR_GOOBLE_ptr(type)
 #define _CLIF_ARG_PTR_GOOBLE_raw_ptr(type)
 
-#define _CLIF_ARG_PTR_TYPE_ptr(type) type
-#define _CLIF_ARG_PTR_TYPE_raw_ptr(type) raw_ptr
+#define _CLIF_ARG_PTR_TYPE_ptr(type)      1
+#define _CLIF_ARG_PTR_TYPE_raw_ptr(type)  2
 
-#define _CLIF_ARG_PTR_TRANSFORM(s, _, type) \
-    BOOST_PP_IIF( \
-            BOOST_PP_IS_EMPTY(BOOST_PP_CAT(_CLIF_ARG_PTR_GOOBLE_, type)), \
-            BOOST_PP_CAT(_CLIF_ARG_PTR_TYPE_, type), \
-            type)
+#define _CLIF_ARG_PTR_GET_TYPE_ptr(type) type
 
+#define _CLIF_ARG_PTR_TYPE_IS(arg, type)                                                            \
+    BOOST_PP_EQUAL(_CLIF_ARG_PTR_TYPE_##arg, type)
+
+#define _CLIF_ARG_PTR_GET(type, a, b)                                                               \
+    BOOST_PP_IIF(BOOST_PP_IS_EMPTY(BOOST_PP_CAT(_CLIF_ARG_PTR_GOOBLE_, type)), a, b)
+
+#define _CLIF_ARG_PTR_TYPENAME_I(param, rawtype)                                                    \
+    _CLIF_EXPR_IIF(_CLIF_ARG_PTR_TYPE_IS(param, 1))(_CLIF_ARG_PTR_GET_TYPE_##param)                 \
+    _CLIF_EXPR_IIF(_CLIF_ARG_PTR_TYPE_IS(param, 2))(rawtype)
+#define _CLIF_ARG_PTR_TYPENAME(param, rawtype)                                                      \
+    _CLIF_ARG_PTR_GET(param, _CLIF_ARG_PTR_TYPENAME_I(param, rawtype), param)
+
+#define _CLIF_ARG_PTR_TYPE_ENUM_I(param)                                                            \
+    _CLIF_EXPR_IIF(_CLIF_ARG_PTR_TYPE_IS(param, 1))(CLIF_PTR_INPUT)                                 \
+    _CLIF_EXPR_IIF(_CLIF_ARG_PTR_TYPE_IS(param, 2))(CLIF_PTR_RAW)
+#define _CLIF_ARG_PTR_TYPE_ENUM(param)                                                              \
+    _CLIF_ARG_PTR_GET(param, _CLIF_ARG_PTR_TYPE_ENUM_I(param), CLIF_PTR_NONE)
+
+#define _CLIF_ARG_PTR_TYPE(param)                                                                   \
+    _CLIF_ARG_PTR_GET(param, _CLIF_ARG_PTR_TYPENAME_I(param, void)*, param)
+
+#define _CLIF_ARG_PTR_CAST(param)                                                                   \
+    _CLIF_ARG_PTR_GET(param, (_CLIF_ARG_PTR_TYPENAME_I(param, void)*),  *(param *))
+
+#define _CLIF_ARG_PTR_TRANSFORM(s, _, type)                                                         \
+    _CLIF_ARG_PTR_GET(type, ptr, type)
 
 #define _CLIF_ARG_TYPE_doc(unused...)        1
 #define _CLIF_ARG_TYPE_cmd_group(unused...)  2
@@ -127,10 +151,12 @@ RB_HEAD(clif_cmdtree, clif_cmd_descriptor) clif_cmdtree_root;
     "arg" BOOST_PP_STRINGIZE(index), ""
 
 #define _CLIF_STATIC_PARAM_DESCRIPTION_I(r, _, param)                                               \
-    sizeof(param), BOOST_PP_STRINGIZE(param),                                                       \
-    (int (*)(char *, void *))BOOST_PP_CAT(clif_parse_, param),
+    sizeof(_CLIF_ARG_PTR_TYPENAME(param, void*)),                                                   \
+    _CLIF_ARG_PTR_TYPE_ENUM(param),                                                                 \
+    BOOST_PP_STRINGIZE(_CLIF_ARG_PTR_TYPENAME(param, pointer)),                                     \
+    (int (*)(char *, void *))BOOST_PP_CAT(clif_parse_, _CLIF_ARG_PTR_TYPENAME(param, ptr)),
 
-#define _CLIF_STATIC_PARAM_DESCRIPTION_NULL(r, _, unused) 0, NULL, NULL,
+#define _CLIF_STATIC_PARAM_DESCRIPTION_NULL(r, _, unused) 0, CLIF_PTR_NONE, NULL, NULL,
 
 #define _CLIF_STATIC_PARAM_DESCRIPTION(paramtypes)                                                  \
     BOOST_PP_SEQ_FOR_EACH(_CLIF_STATIC_PARAM_DESCRIPTION_I, _, paramtypes)                          \
@@ -138,7 +164,7 @@ RB_HEAD(clif_cmdtree, clif_cmd_descriptor) clif_cmdtree_root;
         BOOST_PP_SUB(CLIF_MAX_NR_OF_PARAMETERS, BOOST_PP_SEQ_SIZE(paramtypes)),                     \
         _CLIF_STATIC_PARAM_DESCRIPTION_NULL, _)
 
-#define _CLIF_GET_ARG_ARG(z, index, args)     \
+#define _CLIF_GET_ARG_ARG(z, index, args)                                                           \
     _CLIF_GET_ARG(_CLIF_ARG_TYPE_arg(index), args, _CLIF_DEFAULT_PARAM_DESCRIPTION(index))
 
 #define _CLIF_HANDLE_REGISTER_CMD_ARGS(paramtypes, args)                                            \
@@ -155,6 +181,7 @@ RB_HEAD(clif_cmdtree, clif_cmd_descriptor) clif_cmdtree_root;
     , const char * _CLIF_PARAM_NAME(doc, n)
 #define _CLIF_PARAM_DECL_STATIC(z, n, _)                                                            \
     , size_t _CLIF_PARAM_NAME(size, n)                                                              \
+    , enum clif_ptr_type _CLIF_PARAM_NAME(ptrtype, n)                                               \
     , const char * _CLIF_PARAM_NAME(type, n)                                                        \
     , int (* _CLIF_PARAM_NAME(parser, n))(char *, void *)
 #define _CLIF_PARAM_NAME(name, index)                                                               \
@@ -169,7 +196,7 @@ RB_HEAD(clif_cmdtree, clif_cmd_descriptor) clif_cmdtree_root;
 
 #define CLIF_REGISTER_CMD(command, function, paramtypes, args...)                                   \
     clif_add_cmd_descriptor(command, function,                                                      \
-        _CLIF_CALLER_FN(BOOST_PP_TUPLE_TO_SEQ(paramtypes)), BOOST_PP_TUPLE_SIZE(paramtypes),        \
+        _CLIF_CALLER_FN(paramtypes), BOOST_PP_TUPLE_SIZE(paramtypes),                               \
         _CLIF_HANDLE_REGISTER_CMD_ARGS(                                                             \
             BOOST_PP_TUPLE_TO_SEQ(paramtypes), BOOST_PP_VARIADIC_TO_SEQ(args)));
 
@@ -182,6 +209,6 @@ void clif_add_cmd_descriptor(const char* command, void* functionToCall,
 int clif_parse(char * line);
 
 int clif_parse_int(char * token, int * result);
-
+int clif_parse_ptr(char * token, void * result);
 
 #endif
